@@ -63,6 +63,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'fab-clientes', // las pestañas del shell siguen montadas: tags distintos
             onPressed: _nuevo,
             icon: const Icon(Icons.person_add_alt_1),
             label: const Text('Nuevo cliente'),

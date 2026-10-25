@@ -156,6 +156,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'fab-agenda', // las pestañas del shell siguen montadas: tags distintos
             onPressed: () => _nuevoTurno(vm),
             icon: const Icon(Icons.add),
             label: const Text('Nuevo turno'),
@@ -247,7 +248,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
           onPressed: () => vm.cambiarSemana(-1),
           icon: const Icon(Icons.chevron_left, size: 22),
         ),
-        Text(vm.mesSemana, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(
+            vm.mesSemana,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+        ),
         IconButton(
           tooltip: 'Semana siguiente',
           visualDensity: VisualDensity.compact,

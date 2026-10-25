@@ -608,9 +608,10 @@ class _BarraGuardar extends StatelessWidget {
                     onPressed: onCancelar,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 46),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(23)),
                     ),
-                    child: const Text('Cancelar'),
+                    child: const Text('Cancelar', maxLines: 1, softWrap: false),
                   ),
                 ),
                 const SizedBox(width: 10),

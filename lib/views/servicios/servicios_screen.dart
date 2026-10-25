@@ -169,8 +169,14 @@ class _TarjetaServicio extends StatelessWidget {
                 children: [
                   Icon(Icons.schedule, size: 12, color: cs.onSurfaceVariant),
                   const SizedBox(width: 3),
-                  Text(Fmt.duracion(servicio.duracionMin), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                  const Spacer(),
+                  Expanded(
+                    child: Text(
+                      Fmt.duracion(servicio.duracionMin),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    ),
+                  ),
                   Text(Fmt.dinero(servicio.precio), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.primary)),
                 ],
               ),

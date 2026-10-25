@@ -158,7 +158,14 @@ class _TarjetaHorario extends StatelessWidget {
                         children: [
                           Icon(Icons.phone, size: 13, color: cs.onSurfaceVariant),
                           const SizedBox(width: 4),
-                          Text(Fmt.telefono(c.telefono), style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                          Flexible(
+                            child: Text(
+                              Fmt.telefono(c.telefono),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                            ),
+                          ),
                         ],
                       ),
                     ],
