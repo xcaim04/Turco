@@ -5,6 +5,7 @@ import '../../core/utils/fmt.dart';
 import '../../models/models.dart';
 import '../../viewmodels/servicios_viewmodel.dart';
 import '../../widgets/controles.dart';
+import '../../widgets/dialogos_turno.dart';
 
 class ServiciosScreen extends StatefulWidget {
   const ServiciosScreen({super.key});
@@ -53,6 +54,7 @@ class _ServiciosScreenState extends State<ServiciosScreen> {
           body: SafeArea(
             top: false,
             child: ContenidoLimitado(
+              maxWidth: 1200,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 child: Column(
@@ -102,18 +104,20 @@ class _ServiciosScreenState extends State<ServiciosScreen> {
                         ),
                       )
                     else
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          mainAxisExtent: 206,
+                      LayoutBuilder(
+                        builder: (context, constraints) => GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          padding: EdgeInsets.zero,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: columnasServicios(constraints.maxWidth),
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            mainAxisExtent: 206,
+                          ),
+                          itemCount: servicios.length,
+                          itemBuilder: (context, i) => _TarjetaServicio(servicio: servicios[i]),
                         ),
-                        itemCount: servicios.length,
-                        itemBuilder: (context, i) => _TarjetaServicio(servicio: servicios[i]),
                       ),
                   ],
                 ),
@@ -125,6 +129,9 @@ class _ServiciosScreenState extends State<ServiciosScreen> {
     );
   }
 }
+
+/// 2 columnas en menos de 600 dp, 3 entre 600 y 840 dp y 4 en más de 840 dp.
+int columnasServicios(double ancho) => ancho < 600 ? 2 : (ancho <= 840 ? 3 : 4);
 
 class _TarjetaServicio extends StatelessWidget {
   const _TarjetaServicio({required this.servicio});
@@ -138,7 +145,12 @@ class _TarjetaServicio extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.push('/turno/nuevo', extra: TurnoFormInicial(servicioId: servicio.id)),
+        onTap: () async {
+          final turno = await context.push<Turno>('/turno/nuevo', extra: TurnoFormInicial(servicioId: servicio.id));
+          if (turno != null && context.mounted) {
+            avisar(context, mensajeTurnoGuardado(turno, edicion: false));
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Column(

@@ -29,7 +29,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
   @override
   void didUpdateWidget(covariant AgendaScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.estilistaId != widget.estilistaId) {
+    // El filtro llega desde Estilistas como /agenda?estilista=ID.
+    if (widget.estilistaId != null && oldWidget.estilistaId != widget.estilistaId) {
       _vm?.seleccionarEstilista(widget.estilistaId);
     }
   }
@@ -361,6 +362,13 @@ class _AgendaScreenState extends State<AgendaScreen> {
     );
   }
 
+  /// Al elegir un chip a mano se quita el parámetro de consulta, para que
+  /// volver a tocar el mismo estilista en Estilistas aplique el filtro otra vez.
+  void _filtrarEstilista(AgendaViewModel vm, int? id) {
+    vm.seleccionarEstilista(id);
+    if (widget.estilistaId != null) context.go('/agenda');
+  }
+
   Widget _filtrosEstilista(AgendaViewModel vm) {
     return SizedBox(
       height: 32,
@@ -370,14 +378,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ChipOpcion(
             texto: 'Todos',
             seleccionado: vm.estilistaId == null,
-            onTap: () => vm.seleccionarEstilista(null),
+            onTap: () => _filtrarEstilista(vm, null),
           ),
           for (final e in vm.estilistas) ...[
             const SizedBox(width: 8),
             ChipOpcion(
               texto: e.primerNombre,
               seleccionado: vm.estilistaId == e.id,
-              onTap: () => vm.seleccionarEstilista(e.id),
+              onTap: () => _filtrarEstilista(vm, e.id),
             ),
           ],
         ],
