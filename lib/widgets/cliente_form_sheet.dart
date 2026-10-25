@@ -1,0 +1,183 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../core/app_scope.dart';
+import '../core/utils/validadores.dart';
+import '../models/models.dart';
+import 'controles.dart';
+
+Future<Cliente?> mostrarFormularioCliente(BuildContext context, {Cliente? cliente}) {
+  return showModalBottomSheet<Cliente>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (_) => _FormularioCliente(cliente: cliente),
+  );
+}
+
+class _FormularioCliente extends StatefulWidget {
+  const _FormularioCliente({this.cliente});
+  final Cliente? cliente;
+
+  @override
+  State<_FormularioCliente> createState() => _FormularioClienteState();
+}
+
+class _FormularioClienteState extends State<_FormularioCliente> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nombre;
+  late final TextEditingController _telefono;
+  late final TextEditingController _correo;
+  late Genero _genero;
+  String? _errorTelefono;
+  String? _errorGeneral;
+  bool _enviado = false;
+
+  bool get _esEdicion => widget.cliente != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = widget.cliente;
+    _nombre = TextEditingController(text: c?.nombre ?? '');
+    _telefono = TextEditingController(text: c?.telefono ?? '');
+    _correo = TextEditingController(text: c?.correo ?? '');
+    _genero = c?.genero ?? Genero.mujer;
+  }
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    _telefono.dispose();
+    _correo.dispose();
+    super.dispose();
+  }
+
+  void _guardar() {
+    setState(() {
+      _enviado = true;
+      _errorTelefono = null;
+      _errorGeneral = null;
+    });
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final store = AppScope.of(context).store;
+    final resultado = store.guardarCliente(
+      id: widget.cliente?.id,
+      nombre: _nombre.text,
+      telefono: _telefono.text,
+      genero: _genero,
+      correo: _correo.text,
+    );
+    if (resultado.error != null) {
+      setState(() => _errorTelefono = resultado.error);
+      return;
+    }
+    Navigator.of(context).pop(resultado.cliente);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Form(
+          key: _formKey,
+          autovalidateMode: _enviado ? AutovalidateMode.onUserInteraction : AutovalidateMode.disabled,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _esEdicion ? 'Editar cliente' : 'Nuevo cliente',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              Text(
+                _esEdicion ? 'Actualiza los datos del cliente.' : 'Agrega un cliente para reservar sus turnos.',
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 18),
+              TextFormField(
+                controller: _nombre,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'Nombre completo', hintText: 'Ej. Laura Gómez'),
+                validator: Validadores.nombre,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _telefono,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
+                decoration: InputDecoration(
+                  labelText: 'Teléfono',
+                  hintText: '8 dígitos',
+                  errorText: _errorTelefono,
+                ),
+                onChanged: (_) {
+                  if (_errorTelefono != null) setState(() => _errorTelefono = null);
+                },
+                validator: Validadores.telefono,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _correo,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(labelText: 'Correo (opcional)', hintText: 'cliente@correo.com'),
+                validator: Validadores.correo,
+              ),
+              const SizedBox(height: 16),
+              Text('Género', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              SelectorSegmentado<Genero>(
+                opciones: const [
+                  OpcionSegmento(Genero.mujer, 'Mujer'),
+                  OpcionSegmento(Genero.hombre, 'Hombre'),
+                ],
+                seleccionada: _genero,
+                onChanged: (g) => setState(() => _genero = g),
+              ),
+              if (_errorGeneral != null) ...[
+                const SizedBox(height: 12),
+                Text(_errorGeneral!, style: TextStyle(color: cs.error, fontSize: 12)),
+              ],
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: _guardar,
+                      icon: const Icon(Icons.check, size: 18),
+                      label: Text(_esEdicion ? 'Guardar cambios' : 'Guardar cliente'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
