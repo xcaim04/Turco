@@ -242,27 +242,33 @@ class _AgendaScreenState extends State<AgendaScreen> {
     final cs = Theme.of(context).colorScheme;
     return Row(
       children: [
-        IconButton(
-          tooltip: 'Semana anterior',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => vm.cambiarSemana(-1),
-          icon: const Icon(Icons.chevron_left, size: 22),
-        ),
-        Flexible(
-          child: Text(
-            vm.mesSemana,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        // El mes ocupa lo que necesite y solo se recorta si no cabe.
+        Expanded(
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Semana anterior',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => vm.cambiarSemana(-1),
+                icon: const Icon(Icons.chevron_left, size: 22),
+              ),
+              Flexible(
+                child: Text(
+                  vm.mesSemana,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Semana siguiente',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => vm.cambiarSemana(1),
+                icon: const Icon(Icons.chevron_right, size: 22),
+              ),
+            ],
           ),
         ),
-        IconButton(
-          tooltip: 'Semana siguiente',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => vm.cambiarSemana(1),
-          icon: const Icon(Icons.chevron_right, size: 22),
-        ),
-        const Spacer(),
         TextButton.icon(
           onPressed: () => _elegirFecha(vm),
           icon: const Icon(Icons.calendar_today_outlined, size: 17),
