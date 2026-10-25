@@ -6,6 +6,7 @@ import '../../core/utils/fmt.dart';
 import '../../models/models.dart';
 import '../../viewmodels/agenda_viewmodel.dart';
 import '../../widgets/controles.dart';
+import '../../widgets/dialogos_turno.dart';
 import '../../widgets/theme_sheet.dart';
 
 class AgendaScreen extends StatefulWidget {
@@ -52,6 +53,72 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (f != null) vm.seleccionarDia(f);
   }
 
+  /// Abre el formulario con la fecha seleccionada. El turno guardado vuelve
+  /// con `context.pop(turno)` y la Agenda se ubica en su fecha.
+  Future<void> _nuevoTurno(AgendaViewModel vm) async {
+    final turno = await context.push<Turno>(
+      '/turno/nuevo',
+      extra: TurnoFormInicial(fecha: vm.diaSeleccionado),
+    );
+    if (turno == null || !mounted) return;
+    vm.seleccionarDia(turno.inicio);
+    avisar(context, mensajeTurnoGuardado(turno, edicion: false));
+  }
+
+  /// Pulsación larga sobre un turno programado: Completar o Cancelar.
+  Future<void> _accionesRapidas(AgendaViewModel vm, Turno turno) async {
+    final store = AppScope.of(context).store;
+    final cliente = store.clientePorId(turno.clienteId);
+    final accion = await showModalBottomSheet<EstadoTurno>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  cliente?.nombre ?? 'Cliente eliminado',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${Fmt.hora(turno.inicio)} a ${Fmt.hora(turno.fin)} · ${turno.resumenServicios}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Divider(height: 1, color: cs.outlineVariant),
+              ListTile(
+                leading: Icon(Icons.check_circle_outline, color: cs.tertiary),
+                title: const Text('Completar'),
+                onTap: () => Navigator.of(context).pop(EstadoTurno.completado),
+              ),
+              ListTile(
+                leading: Icon(Icons.block, color: cs.error),
+                title: Text('Cancelar', style: TextStyle(color: cs.error)),
+                onTap: () => Navigator.of(context).pop(EstadoTurno.cancelado),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (accion == null || !mounted) return;
+    if (!await confirmarCambioEstado(context, accion) || !mounted) return;
+    final error = accion == EstadoTurno.completado ? vm.completar(turno.id) : vm.cancelar(turno.id);
+    if (!mounted) return;
+    avisar(
+      context,
+      error ?? (accion == EstadoTurno.completado ? 'Turno completado' : 'Turno cancelado'),
+      error: error != null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = _vm;
@@ -88,46 +155,54 @@ class _AgendaScreenState extends State<AgendaScreen> {
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => context.push('/turno/nuevo'),
+            onPressed: () => _nuevoTurno(vm),
             icon: const Icon(Icons.add),
             label: const Text('Nuevo turno'),
           ),
           body: SafeArea(
             top: false,
             child: ContenidoLimitado(
-              child: SingleChildScrollView(
+              // El primer elemento es la cabecera (semana, resumen y filtros);
+              // el resto son los turnos visibles o el estado vacío.
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _cabeceraSemana(context, vm),
-                    const SizedBox(height: 8),
-                    _tiraDias(vm),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Domingo: salón cerrado',
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                    ),
-                    if (turnos.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _resumen(vm),
-                    ],
-                    const SizedBox(height: 12),
-                    _filtrosEstilista(vm),
-                    const SizedBox(height: 10),
-                    SelectorSegmentado<EstadoTurno?>(
-                      opciones: const [
-                        OpcionSegmento<EstadoTurno?>(null, 'Todos'),
-                        OpcionSegmento<EstadoTurno?>(EstadoTurno.programado, 'Program.'),
-                        OpcionSegmento<EstadoTurno?>(EstadoTurno.completado, 'Complet.'),
-                        OpcionSegmento<EstadoTurno?>(EstadoTurno.cancelado, 'Cancel.'),
+                itemCount: 1 + (visibles.isEmpty ? 1 : visibles.length),
+                itemBuilder: (context, i) {
+                  if (i == 0) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _cabeceraSemana(context, vm),
+                        const SizedBox(height: 8),
+                        _tiraDias(vm),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Domingo: salón cerrado',
+                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                        ),
+                        if (turnos.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _resumen(vm),
+                        ],
+                        const SizedBox(height: 12),
+                        _filtrosEstilista(vm),
+                        const SizedBox(height: 10),
+                        SelectorSegmentado<EstadoTurno?>(
+                          opciones: const [
+                            OpcionSegmento<EstadoTurno?>(null, 'Todos'),
+                            OpcionSegmento<EstadoTurno?>(EstadoTurno.programado, 'Program.'),
+                            OpcionSegmento<EstadoTurno?>(EstadoTurno.completado, 'Complet.'),
+                            OpcionSegmento<EstadoTurno?>(EstadoTurno.cancelado, 'Cancel.'),
+                          ],
+                          seleccionada: vm.filtroEstado,
+                          onChanged: vm.seleccionarEstado,
+                        ),
+                        const SizedBox(height: 12),
                       ],
-                      seleccionada: vm.filtroEstado,
-                      onChanged: vm.seleccionarEstado,
-                    ),
-                    const SizedBox(height: 12),
-                    if (visibles.isEmpty)
-                      EstadoVacio(
+                    );
+                  }
+                  if (visibles.isEmpty) {
+                    return EstadoVacio(
                         icono: vm.esDomingo ? Icons.lock_clock_outlined : Icons.event_busy_outlined,
                         titulo: vm.esDomingo ? 'El salón está cerrado' : 'No hay turnos para este día',
                         mensaje: vm.esDomingo
@@ -142,14 +217,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                 icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
                                 label: const Text('Limpiar filtros'),
                               ),
-                      )
-                    else
-                      for (final t in visibles) ...[
-                        _TarjetaTurno(turno: t),
-                        const SizedBox(height: 8),
-                      ],
-                  ],
-                ),
+                    );
+                  }
+                  final t = visibles[i - 1];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _TarjetaTurno(
+                      turno: t,
+                      onLongPress: t.esProgramado ? () => _accionesRapidas(vm, t) : null,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -189,11 +267,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
   Widget _tiraDias(AgendaViewModel vm) {
     final cs = Theme.of(context).colorScheme;
     final hoy = Fmt.soloFecha(DateTime.now());
-    return Row(
-      children: [
-        for (final d in vm.diasSemana) ...[
-          Expanded(
-            child: Builder(builder: (context) {
+    final dias = vm.diasSemana;
+    return SizedBox(
+      height: 60,
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView.builder(
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          itemExtent: constraints.maxWidth / dias.length,
+          itemCount: dias.length,
+          itemBuilder: (context, i) {
+              final d = dias[i];
               final seleccionado = Fmt.mismoDia(d, vm.diaSeleccionado);
               final domingo = d.weekday == DateTime.sunday;
               final esHoy = Fmt.mismoDia(d, hoy);
@@ -241,10 +325,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   ),
                 ),
               );
-            }),
-          ),
-        ],
-      ],
+          },
+        ),
+      ),
     );
   }
 
@@ -304,8 +387,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
 }
 
 class _TarjetaTurno extends StatelessWidget {
-  const _TarjetaTurno({required this.turno});
+  const _TarjetaTurno({required this.turno, this.onLongPress});
   final Turno turno;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -326,6 +410,7 @@ class _TarjetaTurno extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => context.push('/turno/${turno.id}'),
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             child: IntrinsicHeight(

@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../viewmodels/turno_detalle_viewmodel.dart';
 import '../../widgets/avatares.dart';
 import '../../widgets/controles.dart';
+import '../../widgets/dialogos_turno.dart';
 
 class TurnoDetalleScreen extends StatefulWidget {
   const TurnoDetalleScreen({super.key, required this.turnoId});
@@ -40,65 +41,22 @@ class _TurnoDetalleScreenState extends State<TurnoDetalleScreen> {
     }
   }
 
-  Future<void> _completar(TurnoDetalleViewModel vm) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Completar turno?'),
-        content: const Text('El turno pasará a solo lectura y ya no se podrá editar.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Volver')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Completar')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final error = vm.completar();
+  Future<void> _cambiarEstado(TurnoDetalleViewModel vm, EstadoTurno nuevo) async {
+    if (!await confirmarCambioEstado(context, nuevo) || !mounted) return;
+    final error = nuevo == EstadoTurno.completado ? vm.completar() : vm.cancelar();
     if (!mounted) return;
-    if (error != null) {
-      _snack(error, error: true);
-    } else {
-      _snack('Turno completado');
-    }
+    avisar(
+      context,
+      error ?? (nuevo == EstadoTurno.completado ? 'Turno completado' : 'Turno cancelado'),
+      error: error != null,
+    );
   }
 
-  Future<void> _cancelar(TurnoDetalleViewModel vm) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: const Text('¿Cancelar turno?'),
-          content: const Text('Esta acción libera el horario y no se puede deshacer.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Volver')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Cancelar turno'),
-            ),
-          ],
-        );
-      },
-    );
-    if (ok != true || !mounted) return;
-    final error = vm.cancelar();
-    if (!mounted) return;
-    if (error != null) {
-      _snack(error, error: true);
-    } else {
-      _snack('Turno cancelado');
+  Future<void> _editar(Turno turno) async {
+    final guardado = await context.push<Turno>('/turno/${turno.id}/editar');
+    if (guardado != null && mounted) {
+      avisar(context, mensajeTurnoGuardado(guardado, edicion: true));
     }
-  }
-
-  void _snack(String texto, {bool error = false}) {
-    final cs = Theme.of(context).colorScheme;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(texto),
-        backgroundColor: error ? cs.errorContainer : null,
-      ),
-    );
   }
 
   @override
@@ -140,7 +98,8 @@ class _TurnoDetalleScreenState extends State<TurnoDetalleScreen> {
                               ],
                               const SizedBox(height: 10),
                               Text(
-                                'Creado el ${Fmt.ddMMyyyy(turno.creadoEn)} · Modificado el ${Fmt.ddMMyyyy(turno.modificadoEn)}',
+                                'Creado el ${Fmt.ddMMyyyy(turno.creadoEn)} ${Fmt.hora(turno.creadoEn)} · '
+                                'Modificado el ${Fmt.ddMMyyyy(turno.modificadoEn)} ${Fmt.hora(turno.modificadoEn)}',
                                 style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
                               ),
                             ],
@@ -149,9 +108,9 @@ class _TurnoDetalleScreenState extends State<TurnoDetalleScreen> {
                       ),
                       _Acciones(
                         turno: turno,
-                        onEditar: () => context.push('/turno/${turno.id}/editar'),
-                        onCompletar: () => _completar(vm),
-                        onCancelar: () => _cancelar(vm),
+                        onEditar: () => _editar(turno),
+                        onCompletar: () => _cambiarEstado(vm, EstadoTurno.completado),
+                        onCancelar: () => _cambiarEstado(vm, EstadoTurno.cancelado),
                       ),
                     ],
                   ),
@@ -306,12 +265,26 @@ class _TarjetaServicios extends StatelessWidget {
   }
 }
 
-class _TarjetaNotas extends StatelessWidget {
+class _TarjetaNotas extends StatefulWidget {
   const _TarjetaNotas({required this.notas});
   final String notas;
 
   @override
+  State<_TarjetaNotas> createState() => _TarjetaNotasState();
+}
+
+class _TarjetaNotasState extends State<_TarjetaNotas> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final notas = widget.notas;
     final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
@@ -322,7 +295,19 @@ class _TarjetaNotas extends StatelessWidget {
         children: [
           const Text('Notas', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          Text(notas, style: TextStyle(fontSize: 13, height: 1.45, color: cs.onSurfaceVariant)),
+          // Área con scroll propio: una nota larga no estira la pantalla.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 140),
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                padding: const EdgeInsets.only(right: 10),
+                child: Text(notas, style: TextStyle(fontSize: 13, height: 1.45, color: cs.onSurfaceVariant)),
+              ),
+            ),
+          ),
         ],
       ),
     );
