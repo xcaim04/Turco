@@ -28,10 +28,16 @@ class _FormularioClienteState extends State<_FormularioCliente> {
   late final TextEditingController _nombre;
   late final TextEditingController _telefono;
   late final TextEditingController _correo;
-  late Genero _genero;
+  Genero? _genero; // obligatorio: un cliente nuevo empieza sin género
   String? _errorTelefono;
   String? _errorGeneral;
   bool _enviado = false;
+
+  // La acción "siguiente" del teclado recorre nombre → teléfono → correo.
+  final _fNombre = FocusNode();
+  final _fTelefono = FocusNode();
+  final _fCorreo = FocusNode();
+  final _fGenero = FocusNode();
 
   bool get _esEdicion => widget.cliente != null;
 
@@ -42,7 +48,7 @@ class _FormularioClienteState extends State<_FormularioCliente> {
     _nombre = TextEditingController(text: c?.nombre ?? '');
     _telefono = TextEditingController(text: c?.telefono ?? '');
     _correo = TextEditingController(text: c?.correo ?? '');
-    _genero = c?.genero ?? Genero.mujer;
+    _genero = c?.genero;
   }
 
   @override
@@ -50,7 +56,35 @@ class _FormularioClienteState extends State<_FormularioCliente> {
     _nombre.dispose();
     _telefono.dispose();
     _correo.dispose();
+    for (final f in [_fNombre, _fTelefono, _fCorreo, _fGenero]) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  String? _validarTelefono(String? v) {
+    final formato = Validadores.telefono(v);
+    if (formato != null) return formato;
+    final store = AppScope.of(context).store;
+    return store.telefonoDisponible(v!, excluirId: widget.cliente?.id)
+        ? null
+        : 'Este teléfono ya está registrado';
+  }
+
+  String? _validarGenero(Genero? g) => g == null ? 'Selecciona el género' : null;
+
+  /// Lleva el foco al primer campo con error.
+  void _enfocarPrimerError() {
+    final FocusNode? nodo = Validadores.nombre(_nombre.text) != null
+        ? _fNombre
+        : _validarTelefono(_telefono.text) != null || _errorTelefono != null
+            ? _fTelefono
+            : Validadores.correo(_correo.text) != null
+                ? _fCorreo
+                : _validarGenero(_genero) != null
+                    ? _fGenero
+                    : null;
+    nodo?.requestFocus();
   }
 
   void _guardar() {
@@ -59,17 +93,21 @@ class _FormularioClienteState extends State<_FormularioCliente> {
       _errorTelefono = null;
       _errorGeneral = null;
     });
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_formKey.currentState!.validate()) {
+      _enfocarPrimerError();
+      return;
+    }
     final store = AppScope.of(context).store;
     final resultado = store.guardarCliente(
       id: widget.cliente?.id,
       nombre: _nombre.text,
       telefono: _telefono.text,
-      genero: _genero,
+      genero: _genero!,
       correo: _correo.text,
     );
     if (resultado.error != null) {
       setState(() => _errorTelefono = resultado.error);
+      _fTelefono.requestFocus();
       return;
     }
     Navigator.of(context).pop(resultado.cliente);
@@ -110,16 +148,20 @@ class _FormularioClienteState extends State<_FormularioCliente> {
               const SizedBox(height: 18),
               TextFormField(
                 controller: _nombre,
+                focusNode: _fNombre,
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _fTelefono.requestFocus(),
                 decoration: const InputDecoration(labelText: 'Nombre completo', hintText: 'Ej. Laura Gómez'),
                 validator: Validadores.nombre,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _telefono,
+                focusNode: _fTelefono,
                 keyboardType: TextInputType.phone,
                 textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _fCorreo.requestFocus(),
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
                 decoration: InputDecoration(
                   labelText: 'Teléfono',
@@ -129,26 +171,54 @@ class _FormularioClienteState extends State<_FormularioCliente> {
                 onChanged: (_) {
                   if (_errorTelefono != null) setState(() => _errorTelefono = null);
                 },
-                validator: Validadores.telefono,
+                validator: _validarTelefono,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _correo,
+                focusNode: _fCorreo,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _fCorreo.unfocus(),
                 decoration: const InputDecoration(labelText: 'Correo (opcional)', hintText: 'cliente@correo.com'),
                 validator: Validadores.correo,
               ),
               const SizedBox(height: 16),
-              Text('Género', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
-              const SizedBox(height: 6),
-              SelectorSegmentado<Genero>(
-                opciones: const [
-                  OpcionSegmento(Genero.mujer, 'Mujer'),
-                  OpcionSegmento(Genero.hombre, 'Hombre'),
-                ],
-                seleccionada: _genero,
-                onChanged: (g) => setState(() => _genero = g),
+              FormField<Genero>(
+                initialValue: _genero,
+                validator: _validarGenero,
+                builder: (campo) => Focus(
+                  focusNode: _fGenero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Género',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: campo.hasError ? cs.error : cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SelectorSegmentado<Genero?>(
+                        opciones: const [
+                          OpcionSegmento<Genero?>(Genero.mujer, 'Mujer'),
+                          OpcionSegmento<Genero?>(Genero.hombre, 'Hombre'),
+                        ],
+                        seleccionada: _genero,
+                        onChanged: (g) {
+                          setState(() => _genero = g);
+                          campo.didChange(g);
+                        },
+                      ),
+                      if (campo.hasError) ...[
+                        const SizedBox(height: 6),
+                        Text(campo.errorText!, style: TextStyle(color: cs.error, fontSize: 12)),
+                      ],
+                    ],
+                  ),
+                ),
               ),
               if (_errorGeneral != null) ...[
                 const SizedBox(height: 12),

@@ -70,12 +70,14 @@ class _ClientesScreenState extends State<ClientesScreen> {
           body: SafeArea(
             top: false,
             child: ContenidoLimitado(
-              child: SingleChildScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                     TextField(
                       controller: _busqueda,
                       onChanged: vm.buscar,
@@ -125,9 +127,14 @@ class _ClientesScreenState extends State<ClientesScreen> {
                       '${vm.total} ${vm.total == 1 ? 'cliente' : 'clientes'} · ${vm.mujeres} mujeres · ${vm.hombres} hombres',
                       style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
-                    const SizedBox(height: 6),
-                    if (clientes.isEmpty)
-                      EstadoVacio(
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: clientes.isEmpty
+                        ? SingleChildScrollView(
+                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            child: EstadoVacio(
                         icono: Icons.person_search_outlined,
                         titulo: 'No encontramos clientes',
                         mensaje: vm.hayBusquedaOFiltro
@@ -147,14 +154,17 @@ class _ClientesScreenState extends State<ClientesScreen> {
                                 icon: const Icon(Icons.person_add_alt_1, size: 18),
                                 label: const Text('Nuevo cliente'),
                               ),
-                      )
-                    else
-                      for (var i = 0; i < clientes.length; i++) ...[
-                        _FilaCliente(cliente: clientes[i]),
-                        if (i < clientes.length - 1) Divider(color: cs.outlineVariant),
-                      ],
-                  ],
-                ),
+                            ),
+                          )
+                        : ListView.separated(
+                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                            itemCount: clientes.length,
+                            separatorBuilder: (_, __) => Divider(color: cs.outlineVariant),
+                            itemBuilder: (context, i) => _FilaCliente(cliente: clientes[i]),
+                          ),
+                  ),
+                ],
               ),
             ),
           ),

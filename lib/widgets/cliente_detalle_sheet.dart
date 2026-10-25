@@ -6,6 +6,7 @@ import '../models/models.dart';
 import 'avatares.dart';
 import 'controles.dart';
 import 'cliente_form_sheet.dart';
+import 'dialogos_turno.dart';
 
 enum AccionCliente { nuevoTurno, editar, eliminado }
 
@@ -20,7 +21,10 @@ Future<void> mostrarDetalleCliente(BuildContext context, Cliente cliente) async 
   if (!context.mounted || accion == null) return;
   switch (accion) {
     case AccionCliente.nuevoTurno:
-      context.push('/turno/nuevo', extra: TurnoFormInicial(clienteId: cliente.id));
+      final turno = await context.push<Turno>('/turno/nuevo', extra: TurnoFormInicial(clienteId: cliente.id));
+      if (turno != null && context.mounted) {
+        avisar(context, mensajeTurnoGuardado(turno, edicion: false));
+      }
     case AccionCliente.editar:
       final actual = AppScope.of(context).store.clientePorId(cliente.id);
       if (actual == null) return;
