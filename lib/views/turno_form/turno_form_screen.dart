@@ -213,218 +213,224 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
                 key: _formKey,
                 // Tras el primer intento de guardar, cada campo se revalida al cambiar.
                 autovalidateMode: vm.intentoGuardar ? AutovalidateMode.always : AutovalidateMode.disabled,
-                child: ListView(
+                // Column dentro de un SingleChildScrollView (no un ListView perezoso):
+                // así todos los campos están montados, el Form los valida a todos
+                // y el foco puede llegar al primero con error.
+                child: SingleChildScrollView(
                   controller: _scroll,
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                  children: [
-                    FormField<int>(
-                      validator: (_) => vm.validarCliente(),
-                      builder: (campo) => CampoSeleccion(
-                        etiqueta: 'Cliente',
-                        icono: Icons.person_outline,
-                        valor: vm.cliente?.nombre,
-                        placeholder: 'Selecciona un cliente',
-                        onTap: _elegirCliente,
-                        error: campo.errorText,
-                        focusNode: _fCliente,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FormField<int>(
+                        validator: (_) => vm.validarCliente(),
+                        builder: (campo) => CampoSeleccion(
+                          etiqueta: 'Cliente',
+                          icono: Icons.person_outline,
+                          valor: vm.cliente?.nombre,
+                          placeholder: 'Selecciona un cliente',
+                          onTap: _elegirCliente,
+                          error: campo.errorText,
+                          focusNode: _fCliente,
+                        ),
                       ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _crearCliente,
-                        icon: const Icon(Icons.person_add_alt_1, size: 17),
-                        label: const Text('Crear cliente nuevo'),
-                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _crearCliente,
+                          icon: const Icon(Icons.person_add_alt_1, size: 17),
+                          label: const Text('Crear cliente nuevo'),
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    _etiqueta(context, 'Servicios para'),
-                    const SizedBox(height: 6),
-                    SelectorSegmentado<FiltroPublico>(
-                      opciones: const [
-                        OpcionSegmento(FiltroPublico.todos, 'Todos'),
-                        OpcionSegmento(FiltroPublico.mujeres, 'Mujeres'),
-                        OpcionSegmento(FiltroPublico.hombres, 'Hombres'),
-                      ],
-                      seleccionada: vm.publico,
-                      onChanged: (f) => _conAvisoEstilista(() => vm.cambiarPublico(f)),
-                    ),
-                    const SizedBox(height: 14),
-                    FormField<Set<int>>(
-                      validator: (_) => vm.validarServicios(),
-                      builder: (campo) => Focus(
-                        focusNode: _fServicios,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Servicios',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: campo.hasError ? Theme.of(context).colorScheme.error : null,
-                                    ),
-                                  ),
-                                ),
-                                if (vm.serviciosSeleccionados.isNotEmpty)
-                                  Text(
-                                    '${vm.serviciosSeleccionados.length} elegidos',
-                                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            for (final categoria in Categoria.values)
-                              if (vm.serviciosPorCategoria(categoria).isNotEmpty) ...[
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 6, top: 2),
-                                  child: Text(
-                                    categoria.label.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    for (final s in vm.serviciosPorCategoria(categoria))
-                                      ChipOpcion(
-                                        texto: s.nombre,
-                                        seleccionado: vm.servicioSeleccionado(s.id),
-                                        onTap: () => _conAvisoEstilista(() => vm.alternarServicio(s.id)),
+                      const SizedBox(height: 4),
+                      _etiqueta(context, 'Servicios para'),
+                      const SizedBox(height: 6),
+                      SelectorSegmentado<FiltroPublico>(
+                        opciones: const [
+                          OpcionSegmento(FiltroPublico.todos, 'Todos'),
+                          OpcionSegmento(FiltroPublico.mujeres, 'Mujeres'),
+                          OpcionSegmento(FiltroPublico.hombres, 'Hombres'),
+                        ],
+                        seleccionada: vm.publico,
+                        onChanged: (f) => _conAvisoEstilista(() => vm.cambiarPublico(f)),
+                      ),
+                      const SizedBox(height: 14),
+                      FormField<Set<int>>(
+                        validator: (_) => vm.validarServicios(),
+                        builder: (campo) => Focus(
+                          focusNode: _fServicios,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Servicios',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: campo.hasError ? Theme.of(context).colorScheme.error : null,
                                       ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                            if (campo.hasError) _error(context, campo.errorText!),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FormField<int>(
-                      validator: (_) => vm.validarEstilista(),
-                      builder: (campo) => CampoSeleccion(
-                        etiqueta: 'Estilista',
-                        icono: Icons.content_cut,
-                        valor: vm.estilista?.nombre,
-                        placeholder: vm.estilistasDisponibles.isEmpty
-                            ? 'Ningún estilista disponible'
-                            : 'Selecciona un estilista',
-                        onTap: _elegirEstilista,
-                        error: campo.errorText,
-                        habilitado: vm.estilistasDisponibles.isNotEmpty,
-                        focusNode: _fEstilista,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _info(
-                      context,
-                      vm.avisoEstilista ?? 'Solo se muestran estilistas que realizan todos los servicios elegidos.',
-                      destacado: vm.avisoEstilista != null,
-                    ),
-                    const SizedBox(height: 16),
-                    FormField<DateTime>(
-                      validator: (_) => vm.validarFecha(),
-                      builder: (campo) => CampoSeleccion(
-                        etiqueta: 'Fecha',
-                        icono: Icons.calendar_today_outlined,
-                        valor: Fmt.fechaLarga(vm.fecha),
-                        placeholder: 'Elegir fecha',
-                        onTap: _elegirFecha,
-                        error: campo.errorText,
-                        focusNode: _fFecha,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FormField<DateTime>(
-                      validator: (_) => vm.validarHora(),
-                      builder: (campo) => Focus(
-                        focusNode: _fHora,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Hora de inicio',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: campo.hasError ? Theme.of(context).colorScheme.error : null,
+                                    ),
+                                  ),
+                                  if (vm.serviciosSeleccionados.isNotEmpty)
+                                    Text(
+                                      '${vm.serviciosSeleccionados.length} elegidos',
+                                      style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            _leyenda(context),
-                            const SizedBox(height: 10),
-                            if (vm.esDomingo)
-                              _aviso(context, 'El salón está cerrado los domingos. Elige otra fecha.')
-                            else ...[
-                              GridView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                padding: EdgeInsets.zero,
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 4,
-                                  mainAxisSpacing: 8,
-                                  crossAxisSpacing: 8,
-                                  mainAxisExtent: 40,
-                                ),
-                                itemCount: vm.franjas.length,
-                                itemBuilder: (context, i) {
-                                  final f = vm.franjas[i];
-                                  return _FranjaBoton(
-                                    hora: Fmt.hora(f),
-                                    estado: vm.estadoFranja(f),
-                                    onTap: () => vm.seleccionarHora(f),
-                                  );
-                                },
-                              ),
-                              if (vm.sinFranjasLibres) ...[
-                                const SizedBox(height: 10),
-                                _aviso(
-                                  context,
-                                  'No quedan horas libres en esta fecha. Prueba con otra fecha, '
-                                  'otro estilista u otros servicios.',
-                                ),
-                              ],
-                            ],
-                            if (campo.hasError) ...[
                               const SizedBox(height: 8),
-                              _error(context, campo.errorText!),
+                              for (final categoria in Categoria.values)
+                                if (vm.serviciosPorCategoria(categoria).isNotEmpty) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6, top: 2),
+                                    child: Text(
+                                      categoria.label.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final s in vm.serviciosPorCategoria(categoria))
+                                        ChipOpcion(
+                                          texto: s.nombre,
+                                          seleccionado: vm.servicioSeleccionado(s.id),
+                                          onTap: () => _conAvisoEstilista(() => vm.alternarServicio(s.id)),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                              if (campo.hasError) _error(context, campo.errorText!),
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _etiqueta(context, 'Notas (opcional)'),
-                    const SizedBox(height: 4),
-                    TextFormField(
-                      controller: _notas,
-                      focusNode: _fNotas,
-                      onChanged: vm.actualizarNotas,
-                      validator: vm.validarNotas,
-                      minLines: 3,
-                      maxLines: 4,
-                      maxLength: TurnoFormViewModel.maxNotas,
-                      textCapitalization: TextCapitalization.sentences,
-                      // Es el último campo: la acción del teclado cierra el teclado.
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _fNotas.unfocus(),
-                      decoration: const InputDecoration(hintText: 'Preferencias, alergias o indicaciones especiales…'),
-                    ),
-                    if (vm.errorGeneral != null) _error(context, vm.errorGeneral!),
-                  ],
+                      const SizedBox(height: 4),
+                      FormField<int>(
+                        validator: (_) => vm.validarEstilista(),
+                        builder: (campo) => CampoSeleccion(
+                          etiqueta: 'Estilista',
+                          icono: Icons.content_cut,
+                          valor: vm.estilista?.nombre,
+                          placeholder: vm.estilistasDisponibles.isEmpty
+                              ? 'Ningún estilista disponible'
+                              : 'Selecciona un estilista',
+                          onTap: _elegirEstilista,
+                          error: campo.errorText,
+                          habilitado: vm.estilistasDisponibles.isNotEmpty,
+                          focusNode: _fEstilista,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _info(
+                        context,
+                        vm.avisoEstilista ?? 'Solo se muestran estilistas que realizan todos los servicios elegidos.',
+                        destacado: vm.avisoEstilista != null,
+                      ),
+                      const SizedBox(height: 16),
+                      FormField<DateTime>(
+                        validator: (_) => vm.validarFecha(),
+                        builder: (campo) => CampoSeleccion(
+                          etiqueta: 'Fecha',
+                          icono: Icons.calendar_today_outlined,
+                          valor: Fmt.fechaLarga(vm.fecha),
+                          placeholder: 'Elegir fecha',
+                          onTap: _elegirFecha,
+                          error: campo.errorText,
+                          focusNode: _fFecha,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      FormField<DateTime>(
+                        validator: (_) => vm.validarHora(),
+                        builder: (campo) => Focus(
+                          focusNode: _fHora,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Hora de inicio',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: campo.hasError ? Theme.of(context).colorScheme.error : null,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _leyenda(context),
+                              const SizedBox(height: 10),
+                              if (vm.esDomingo)
+                                _aviso(context, 'El salón está cerrado los domingos. Elige otra fecha.')
+                              else ...[
+                                GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  padding: EdgeInsets.zero,
+                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 4,
+                                    mainAxisSpacing: 8,
+                                    crossAxisSpacing: 8,
+                                    mainAxisExtent: 40,
+                                  ),
+                                  itemCount: vm.franjas.length,
+                                  itemBuilder: (context, i) {
+                                    final f = vm.franjas[i];
+                                    return _FranjaBoton(
+                                      hora: Fmt.hora(f),
+                                      estado: vm.estadoFranja(f),
+                                      onTap: () => vm.seleccionarHora(f),
+                                    );
+                                  },
+                                ),
+                                if (vm.sinFranjasLibres) ...[
+                                  const SizedBox(height: 10),
+                                  _aviso(
+                                    context,
+                                    'No quedan horas libres en esta fecha. Prueba con otra fecha, '
+                                    'otro estilista u otros servicios.',
+                                  ),
+                                ],
+                              ],
+                              if (campo.hasError) ...[
+                                const SizedBox(height: 8),
+                                _error(context, campo.errorText!),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _etiqueta(context, 'Notas (opcional)'),
+                      const SizedBox(height: 4),
+                      TextFormField(
+                        controller: _notas,
+                        focusNode: _fNotas,
+                        onChanged: vm.actualizarNotas,
+                        validator: vm.validarNotas,
+                        minLines: 3,
+                        maxLines: 4,
+                        maxLength: TurnoFormViewModel.maxNotas,
+                        textCapitalization: TextCapitalization.sentences,
+                        // Es el último campo: la acción del teclado cierra el teclado.
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _fNotas.unfocus(),
+                        decoration: const InputDecoration(hintText: 'Preferencias, alergias o indicaciones especiales…'),
+                      ),
+                      if (vm.errorGeneral != null) _error(context, vm.errorGeneral!),
+                    ],
+                  ),
                 ),
               ),
             ),
