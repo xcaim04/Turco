@@ -94,7 +94,7 @@ assets/
 ├── fonts/                     Poppins (licencia OFL)
 └── images/                    Avatares de estilistas e imágenes de categorías
 test/                          Tests de reglas, del formulario y de widgets
-capturas/                      Capturas reales de la app en Android
+capturas/                      Capturas de la app corriendo (compilación web, 375 x 812)
 ```
 
 ## Arquitectura
