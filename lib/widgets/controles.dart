@@ -217,6 +217,7 @@ class CampoSeleccion extends StatelessWidget {
     this.onTap,
     this.error,
     this.habilitado = true,
+    this.focusNode,
   });
 
   final String etiqueta;
@@ -226,6 +227,9 @@ class CampoSeleccion extends StatelessWidget {
   final VoidCallback? onTap;
   final String? error;
   final bool habilitado;
+
+  /// Permite que el formulario lleve el foco a este campo (p. ej. al primer error).
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +256,7 @@ class CampoSeleccion extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
+              focusNode: focusNode,
               onTap: habilitado ? onTap : null,
               borderRadius: BorderRadius.circular(12),
               child: Container(

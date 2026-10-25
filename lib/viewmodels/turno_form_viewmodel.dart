@@ -40,13 +40,16 @@ class TurnoFormViewModel extends ChangeNotifier {
   FiltroPublico _publico = FiltroPublico.todos;
   late String _snapshot;
 
-  String? errorCliente;
-  String? errorServicios;
-  String? errorEstilista;
+  /// Error de reglas del store (solape, horario) que se muestra bajo la hora.
   String? errorHora;
   String? errorGeneral;
+
+  /// Aviso cuando un cambio de servicios deja sin efecto al estilista elegido.
+  String? avisoEstilista;
   bool intentoGuardar = false;
   bool guardado = false;
+
+  static const maxNotas = 500;
 
   bool get esEdicion => turnoId != null;
   int? get clienteId => _clienteId;
@@ -75,6 +78,12 @@ class TurnoFormViewModel extends ChangeNotifier {
     if (servicios.isEmpty) return store.estilistas;
     return store.estilistas.where((e) => e.realizaTodos(servicios)).toList();
   }
+
+  List<DateTime> get franjas => Reglas.franjasDelDia(_fecha);
+
+  /// Hay día abierto pero ninguna franja disponible.
+  bool get sinFranjasLibres =>
+      !esDomingo && franjas.every((f) => estadoFranja(f) == EstadoFranja.ocupada);
 
   int get duracion => Reglas.duracionDe(serviciosSeleccionados);
   int get total => serviciosSeleccionados.fold(0, (a, s) => a + s.precio);
@@ -107,7 +116,6 @@ class TurnoFormViewModel extends ChangeNotifier {
   void cambiarCliente(int? id) {
     if (id == _clienteId) return;
     _clienteId = id;
-    errorCliente = null;
     final c = id == null ? null : store.clientePorId(id);
     if (c != null) {
       _aplicarPublico(FiltroPublico.deGenero(c.genero));
@@ -126,12 +134,7 @@ class TurnoFormViewModel extends ChangeNotifier {
     final servicio = store.servicioPorId(id);
     if (servicio == null) return;
     if (!_seleccionados.remove(id)) _seleccionados.add(id);
-    errorServicios = null;
-    if (_estilistaId != null) {
-      final e = store.estilistaPorId(_estilistaId!);
-      if (e == null || !e.realizaTodos(serviciosSeleccionados)) _estilistaId = null;
-    }
-    errorEstilista = null;
+    _quitarEstilistaSiInvalido();
     _limpiarHoraSiInvalida();
     notifyListeners();
   }
@@ -139,7 +142,7 @@ class TurnoFormViewModel extends ChangeNotifier {
   void cambiarEstilista(int? id) {
     if (id == _estilistaId) return;
     _estilistaId = id;
-    errorEstilista = null;
+    avisoEstilista = null;
     _limpiarHoraSiInvalida();
     notifyListeners();
   }
@@ -157,6 +160,7 @@ class TurnoFormViewModel extends ChangeNotifier {
     final ini = inicio;
     _hora = ini != null && Fmt.hora(ini) == Fmt.hora(franja) ? null : franja;
     errorHora = null;
+    errorGeneral = null;
     notifyListeners();
   }
 
@@ -166,57 +170,55 @@ class TurnoFormViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void limpiarErrores() {
-    errorCliente = null;
-    errorServicios = null;
-    errorEstilista = null;
-    errorHora = null;
-    errorGeneral = null;
+  // ---------- validadores de cada campo (los usa el Form de la vista) ----------
+  String? validarCliente() => _clienteId == null ? 'Selecciona un cliente' : null;
+
+  String? validarServicios() => _seleccionados.isEmpty ? 'Elige al menos un servicio' : null;
+
+  String? validarEstilista() {
+    if (_estilistaId != null) return null;
+    return _seleccionados.isEmpty ? 'Primero elige los servicios' : 'Selecciona un estilista';
   }
 
+  String? validarFecha() {
+    if (esDomingo) return 'El salón está cerrado los domingos';
+    if (_fecha.isBefore(Fmt.soloFecha(DateTime.now()))) return 'No se permiten fechas pasadas';
+    return null;
+  }
+
+  String? validarHora() {
+    if (esDomingo) return 'El salón está cerrado los domingos';
+    if (_hora == null) return 'Elige una hora para el turno';
+    return errorHora;
+  }
+
+  String? validarNotas(String? v) =>
+      (v ?? '').length > maxNotas ? 'Las notas admiten hasta $maxNotas caracteres' : null;
+
+  /// Comprueba campos obligatorios y reglas de negocio (solapes, horario).
   bool validar() {
     intentoGuardar = true;
-    limpiarErrores();
-    var ok = true;
-    if (_clienteId == null) {
-      errorCliente = 'Selecciona un cliente';
-      ok = false;
-    }
-    if (_seleccionados.isEmpty) {
-      errorServicios = 'Elige al menos un servicio';
-      ok = false;
-    }
-    if (_estilistaId == null) {
-      errorEstilista = serviciosSeleccionados.isEmpty
-          ? 'Primero elige los servicios'
-          : 'Selecciona un estilista';
-      ok = false;
-    }
-    if (esDomingo) {
-      errorHora = 'El salón está cerrado los domingos';
-      ok = false;
-    } else if (_hora == null) {
-      errorHora = 'Elige una hora para el turno';
-      ok = false;
-    }
-    if (!ok) {
+    errorHora = null;
+    errorGeneral = null;
+    final camposOk = validarCliente() == null &&
+        validarServicios() == null &&
+        validarEstilista() == null &&
+        validarFecha() == null &&
+        validarHora() == null &&
+        validarNotas(_notas) == null;
+    if (!camposOk) {
       notifyListeners();
       return false;
     }
-    final error = store.validarTurno(
+    errorHora = store.validarTurno(
       clienteId: _clienteId,
       estilistaId: _estilistaId,
       servicios: serviciosSeleccionados,
       inicio: inicio,
       excluirId: turnoId,
     );
-    if (error != null) {
-      errorHora = error;
-      notifyListeners();
-      return false;
-    }
     notifyListeners();
-    return true;
+    return errorHora == null;
   }
 
   Turno? guardar() {
@@ -247,13 +249,25 @@ class TurnoFormViewModel extends ChangeNotifier {
         .map((s) => s.id)
         .toList();
     _seleccionados.removeAll(incompatibles);
-    if (_estilistaId != null) {
-      final e = store.estilistaPorId(_estilistaId!);
-      if (e == null || !e.realizaTodos(serviciosSeleccionados)) _estilistaId = null;
-    }
+    _quitarEstilistaSiInvalido();
   }
 
+  /// Si el estilista elegido ya no realiza todos los servicios, se limpia y se avisa.
+  void _quitarEstilistaSiInvalido() {
+    if (_estilistaId == null) return;
+    final e = store.estilistaPorId(_estilistaId!);
+    if (e != null && e.realizaTodos(serviciosSeleccionados)) return;
+    _estilistaId = null;
+    avisoEstilista = e == null
+        ? 'Elige de nuevo el estilista'
+        : 'Se quitó a ${e.primerNombre}: no realiza todos los servicios elegidos';
+  }
+
+  /// Tras cualquier cambio el error de reglas anterior deja de valer, y la
+  /// hora elegida se quita si dejó de estar disponible.
   void _limpiarHoraSiInvalida() {
+    errorHora = null;
+    errorGeneral = null;
     final ini = inicio;
     if (ini == null) return;
     if (estadoFranja(ini) == EstadoFranja.ocupada) {
@@ -268,8 +282,11 @@ class TurnoFormViewModel extends ChangeNotifier {
         '${_hora == null ? '' : Fmt.hora(_hora!)}|${_notas.trim()}|${_publico.name}';
   }
 
+  /// Fecha inicial válida: nunca en el pasado ni en domingo.
   static DateTime _fechaValida(DateTime d) {
-    final f = Fmt.soloFecha(d);
+    final hoy = Fmt.soloFecha(DateTime.now());
+    var f = Fmt.soloFecha(d);
+    if (f.isBefore(hoy)) f = hoy;
     return Reglas.diaAbierto(f) ? f : Fmt.sumarDias(f, 1);
   }
 

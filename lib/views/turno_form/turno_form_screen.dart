@@ -9,6 +9,7 @@ import '../../viewmodels/turno_form_viewmodel.dart';
 import '../../widgets/avatares.dart';
 import '../../widgets/cliente_form_sheet.dart';
 import '../../widgets/controles.dart';
+import '../../widgets/dialogos_turno.dart';
 
 class TurnoFormScreen extends StatefulWidget {
   const TurnoFormScreen({super.key, this.turnoId, this.inicial});
@@ -23,8 +24,16 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
   TurnoFormViewModel? _vm;
   late final TextEditingController _notas;
   bool _permitirSalida = false;
+  final _formKey = GlobalKey<FormState>();
   final _scroll = ScrollController();
-  final _keyHora = GlobalKey();
+
+  // Un FocusNode por campo, en el orden del formulario.
+  final _fCliente = FocusNode(debugLabel: 'cliente');
+  final _fServicios = FocusNode(debugLabel: 'servicios');
+  final _fEstilista = FocusNode(debugLabel: 'estilista');
+  final _fFecha = FocusNode(debugLabel: 'fecha');
+  final _fHora = FocusNode(debugLabel: 'hora');
+  final _fNotas = FocusNode(debugLabel: 'notas');
 
   @override
   void didChangeDependencies() {
@@ -43,6 +52,9 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
   void dispose() {
     _notas.dispose();
     _scroll.dispose();
+    for (final f in [_fCliente, _fServicios, _fEstilista, _fFecha, _fHora, _fNotas]) {
+      f.dispose();
+    }
     _vm?.dispose();
     super.dispose();
   }
@@ -75,26 +87,54 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
     }
   }
 
+  /// Valida el Form; si todo es correcto guarda y devuelve el turno a la
+  /// pantalla anterior con `context.pop(turno)`.
   Future<void> _guardar() async {
     final vm = _vm;
     if (vm == null) return;
-    final turno = vm.guardar();
+    final formOk = _formKey.currentState!.validate();
+    final turno = formOk ? vm.guardar() : null;
     if (turno == null) {
-      if (vm.errorCliente != null || vm.errorServicios != null || vm.errorEstilista != null) {
-        _scroll.animateTo(0, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
-      } else {
-        final ctx = _keyHora.currentContext;
-        if (ctx != null) {
-          await Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 220), alignment: 0.1);
-        }
+      // Marca el intento (los campos pasan a validarse solos) y lleva el foco
+      // al primer campo con error cuando el formulario se haya redibujado.
+      if (!formOk) vm.validar();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _enfocarPrimerError());
+      return;
+    }
+    setState(() => _permitirSalida = true);
+    context.pop(turno);
+  }
+
+  void _enfocarPrimerError() {
+    final vm = _vm;
+    if (vm == null || !mounted) return;
+    final campos = <(String?, FocusNode)>[
+      (vm.validarCliente(), _fCliente),
+      (vm.validarServicios(), _fServicios),
+      (vm.validarEstilista(), _fEstilista),
+      (vm.validarFecha(), _fFecha),
+      (vm.validarHora(), _fHora),
+      (vm.validarNotas(_notas.text), _fNotas),
+    ];
+    for (final (error, nodo) in campos) {
+      if (error == null) continue;
+      nodo.requestFocus();
+      final ctx = nodo.context;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 220), alignment: 0.1);
       }
       return;
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(vm.esEdicion ? 'Turno actualizado correctamente' : 'Turno creado correctamente')),
-    );
-    context.pop();
+  }
+
+  /// Cambios que pueden dejar sin efecto al estilista elegido: se avisa.
+  void _conAvisoEstilista(void Function() cambio) {
+    final vm = _vm!;
+    final antes = vm.estilistaId;
+    cambio();
+    if (antes != null && vm.estilistaId == null && vm.avisoEstilista != null) {
+      avisar(context, vm.avisoEstilista!);
+    }
   }
 
   Future<void> _elegirCliente() async {
@@ -107,12 +147,12 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
       showDragHandle: true,
       builder: (_) => _SelectorCliente(store: store, actual: vm.clienteId),
     );
-    if (id != null) vm.cambiarCliente(id);
+    if (id != null) _conAvisoEstilista(() => vm.cambiarCliente(id));
   }
 
   Future<void> _crearCliente() async {
     final c = await mostrarFormularioCliente(context);
-    if (c != null) _vm?.cambiarCliente(c.id);
+    if (c != null) _conAvisoEstilista(() => _vm?.cambiarCliente(c.id));
   }
 
   Future<void> _elegirEstilista() async {
@@ -169,177 +209,223 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
           body: SafeArea(
             top: false,
             child: ContenidoLimitado(
-              child: ListView(
-                controller: _scroll,
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                children: [
-                  CampoSeleccion(
-                    etiqueta: 'Cliente',
-                    icono: Icons.person_outline,
-                    valor: vm.cliente?.nombre,
-                    placeholder: 'Selecciona un cliente',
-                    onTap: _elegirCliente,
-                    error: vm.errorCliente,
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _crearCliente,
-                      icon: const Icon(Icons.person_add_alt_1, size: 17),
-                      label: const Text('Crear cliente nuevo'),
-                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              child: Form(
+                key: _formKey,
+                // Tras el primer intento de guardar, cada campo se revalida al cambiar.
+                autovalidateMode: vm.intentoGuardar ? AutovalidateMode.always : AutovalidateMode.disabled,
+                child: ListView(
+                  controller: _scroll,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                  children: [
+                    FormField<int>(
+                      validator: (_) => vm.validarCliente(),
+                      builder: (campo) => CampoSeleccion(
+                        etiqueta: 'Cliente',
+                        icono: Icons.person_outline,
+                        valor: vm.cliente?.nombre,
+                        placeholder: 'Selecciona un cliente',
+                        onTap: _elegirCliente,
+                        error: campo.errorText,
+                        focusNode: _fCliente,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  _etiqueta(context, 'Servicios para'),
-                  const SizedBox(height: 6),
-                  SelectorSegmentado<FiltroPublico>(
-                    opciones: const [
-                      OpcionSegmento(FiltroPublico.todos, 'Todos'),
-                      OpcionSegmento(FiltroPublico.mujeres, 'Mujeres'),
-                      OpcionSegmento(FiltroPublico.hombres, 'Hombres'),
-                    ],
-                    seleccionada: vm.publico,
-                    onChanged: vm.cambiarPublico,
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Servicios', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
-                      if (vm.serviciosSeleccionados.isNotEmpty)
-                        Text(
-                          '${vm.serviciosSeleccionados.length} elegidos',
-                          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  for (final categoria in Categoria.values)
-                    if (vm.serviciosPorCategoria(categoria).isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6, top: 2),
-                        child: Text(
-                          categoria.label.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _crearCliente,
+                        icon: const Icon(Icons.person_add_alt_1, size: 17),
+                        label: const Text('Crear cliente nuevo'),
+                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                       ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final s in vm.serviciosPorCategoria(categoria))
-                            ChipOpcion(
-                              texto: s.nombre,
-                              seleccionado: vm.servicioSeleccionado(s.id),
-                              onTap: () => vm.alternarServicio(s.id),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  if (vm.errorServicios != null) _error(context, vm.errorServicios!),
-                  const SizedBox(height: 4),
-                  CampoSeleccion(
-                    etiqueta: 'Estilista',
-                    icono: Icons.content_cut,
-                    valor: vm.estilista?.nombre,
-                    placeholder: vm.estilistasDisponibles.isEmpty
-                        ? 'Ningún estilista disponible'
-                        : 'Selecciona un estilista',
-                    onTap: _elegirEstilista,
-                    error: vm.errorEstilista,
-                    habilitado: vm.estilistasDisponibles.isNotEmpty,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Solo se muestran estilistas que realizan todos los servicios elegidos.',
-                          style: TextStyle(fontSize: 11, height: 1.35, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  CampoSeleccion(
-                    etiqueta: 'Fecha',
-                    icono: Icons.calendar_today_outlined,
-                    valor: Fmt.fechaLarga(vm.fecha),
-                    placeholder: 'Elegir fecha',
-                    onTap: _elegirFecha,
-                  ),
-                  const SizedBox(height: 16),
-                  Column(
-                    key: _keyHora,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text('Hora de inicio', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      _leyenda(context),
-                      const SizedBox(height: 10),
-                      if (vm.esDomingo)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.errorContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'El salón está cerrado los domingos. Elige otra fecha.',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 13),
-                          ),
-                        )
-                      else
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: EdgeInsets.zero,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            mainAxisExtent: 40,
-                          ),
-                          itemCount: Reglas.franjasDelDia(vm.fecha).length,
-                          itemBuilder: (context, i) {
-                            final f = Reglas.franjasDelDia(vm.fecha)[i];
-                            return _FranjaBoton(
-                              hora: Fmt.hora(f),
-                              estado: vm.estadoFranja(f),
-                              onTap: () => vm.seleccionarHora(f),
-                            );
-                          },
-                        ),
-                      if (vm.errorHora != null) ...[
-                        const SizedBox(height: 8),
-                        _error(context, vm.errorHora!),
+                    ),
+                    const SizedBox(height: 4),
+                    _etiqueta(context, 'Servicios para'),
+                    const SizedBox(height: 6),
+                    SelectorSegmentado<FiltroPublico>(
+                      opciones: const [
+                        OpcionSegmento(FiltroPublico.todos, 'Todos'),
+                        OpcionSegmento(FiltroPublico.mujeres, 'Mujeres'),
+                        OpcionSegmento(FiltroPublico.hombres, 'Hombres'),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _etiqueta(context, 'Notas (opcional)'),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: _notas,
-                    onChanged: vm.actualizarNotas,
-                    minLines: 3,
-                    maxLines: 4,
-                    maxLength: 500,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(hintText: 'Preferencias, alergias o indicaciones especiales…'),
-                  ),
-                  if (vm.errorGeneral != null) _error(context, vm.errorGeneral!),
-                ],
+                      seleccionada: vm.publico,
+                      onChanged: (f) => _conAvisoEstilista(() => vm.cambiarPublico(f)),
+                    ),
+                    const SizedBox(height: 14),
+                    FormField<Set<int>>(
+                      validator: (_) => vm.validarServicios(),
+                      builder: (campo) => Focus(
+                        focusNode: _fServicios,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Servicios',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: campo.hasError ? Theme.of(context).colorScheme.error : null,
+                                    ),
+                                  ),
+                                ),
+                                if (vm.serviciosSeleccionados.isNotEmpty)
+                                  Text(
+                                    '${vm.serviciosSeleccionados.length} elegidos',
+                                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            for (final categoria in Categoria.values)
+                              if (vm.serviciosPorCategoria(categoria).isNotEmpty) ...[
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6, top: 2),
+                                  child: Text(
+                                    categoria.label.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final s in vm.serviciosPorCategoria(categoria))
+                                      ChipOpcion(
+                                        texto: s.nombre,
+                                        seleccionado: vm.servicioSeleccionado(s.id),
+                                        onTap: () => _conAvisoEstilista(() => vm.alternarServicio(s.id)),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                            if (campo.hasError) _error(context, campo.errorText!),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    FormField<int>(
+                      validator: (_) => vm.validarEstilista(),
+                      builder: (campo) => CampoSeleccion(
+                        etiqueta: 'Estilista',
+                        icono: Icons.content_cut,
+                        valor: vm.estilista?.nombre,
+                        placeholder: vm.estilistasDisponibles.isEmpty
+                            ? 'Ningún estilista disponible'
+                            : 'Selecciona un estilista',
+                        onTap: _elegirEstilista,
+                        error: campo.errorText,
+                        habilitado: vm.estilistasDisponibles.isNotEmpty,
+                        focusNode: _fEstilista,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _info(
+                      context,
+                      vm.avisoEstilista ?? 'Solo se muestran estilistas que realizan todos los servicios elegidos.',
+                      destacado: vm.avisoEstilista != null,
+                    ),
+                    const SizedBox(height: 16),
+                    FormField<DateTime>(
+                      validator: (_) => vm.validarFecha(),
+                      builder: (campo) => CampoSeleccion(
+                        etiqueta: 'Fecha',
+                        icono: Icons.calendar_today_outlined,
+                        valor: Fmt.fechaLarga(vm.fecha),
+                        placeholder: 'Elegir fecha',
+                        onTap: _elegirFecha,
+                        error: campo.errorText,
+                        focusNode: _fFecha,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FormField<DateTime>(
+                      validator: (_) => vm.validarHora(),
+                      builder: (campo) => Focus(
+                        focusNode: _fHora,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Hora de inicio',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: campo.hasError ? Theme.of(context).colorScheme.error : null,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _leyenda(context),
+                            const SizedBox(height: 10),
+                            if (vm.esDomingo)
+                              _aviso(context, 'El salón está cerrado los domingos. Elige otra fecha.')
+                            else ...[
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 4,
+                                  mainAxisSpacing: 8,
+                                  crossAxisSpacing: 8,
+                                  mainAxisExtent: 40,
+                                ),
+                                itemCount: vm.franjas.length,
+                                itemBuilder: (context, i) {
+                                  final f = vm.franjas[i];
+                                  return _FranjaBoton(
+                                    hora: Fmt.hora(f),
+                                    estado: vm.estadoFranja(f),
+                                    onTap: () => vm.seleccionarHora(f),
+                                  );
+                                },
+                              ),
+                              if (vm.sinFranjasLibres) ...[
+                                const SizedBox(height: 10),
+                                _aviso(
+                                  context,
+                                  'No quedan horas libres en esta fecha. Prueba con otra fecha, '
+                                  'otro estilista u otros servicios.',
+                                ),
+                              ],
+                            ],
+                            if (campo.hasError) ...[
+                              const SizedBox(height: 8),
+                              _error(context, campo.errorText!),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _etiqueta(context, 'Notas (opcional)'),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: _notas,
+                      focusNode: _fNotas,
+                      onChanged: vm.actualizarNotas,
+                      validator: vm.validarNotas,
+                      minLines: 3,
+                      maxLines: 4,
+                      maxLength: TurnoFormViewModel.maxNotas,
+                      textCapitalization: TextCapitalization.sentences,
+                      // Es el último campo: la acción del teclado cierra el teclado.
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _fNotas.unfocus(),
+                      decoration: const InputDecoration(hintText: 'Preferencias, alergias o indicaciones especiales…'),
+                    ),
+                    if (vm.errorGeneral != null) _error(context, vm.errorGeneral!),
+                  ],
+                ),
               ),
             ),
           ),
@@ -352,6 +438,38 @@ class _TurnoFormScreenState extends State<TurnoFormScreen> {
         texto,
         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
+
+  Widget _info(BuildContext context, String texto, {bool destacado = false}) {
+    final cs = Theme.of(context).colorScheme;
+    final color = destacado ? cs.tertiary : cs.onSurfaceVariant;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(destacado ? Icons.warning_amber_rounded : Icons.info_outline, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            texto,
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: color,
+              fontWeight: destacado ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _aviso(BuildContext context, String texto) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
+      child: Text(texto, style: TextStyle(color: cs.onErrorContainer, fontSize: 13)),
+    );
+  }
 
   Widget _error(BuildContext context, String texto) {
     final cs = Theme.of(context).colorScheme;
@@ -460,8 +578,8 @@ class _BarraGuardar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (vm.serviciosSeleccionados.isNotEmpty)
-              Container(
+            // Resumen siempre visible: duración, hora de fin y precio total.
+            Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(12)),
@@ -471,12 +589,12 @@ class _BarraGuardar extends StatelessWidget {
                   runSpacing: 4,
                   children: [
                     _dato(cs, Icons.schedule, Fmt.duracion(vm.duracion), color: cs.onPrimaryContainer),
-                    if (fin != null) _dato(cs, Icons.flag_outlined, 'Fin ${Fmt.hora(fin)}', color: cs.onPrimaryContainer),
+                    _dato(cs, Icons.flag_outlined, 'Fin ${fin == null ? '--:--' : Fmt.hora(fin)}', color: cs.onPrimaryContainer),
                     _dato(cs, Icons.payments_outlined, Fmt.dinero(vm.total), color: cs.onPrimaryContainer, negrita: true),
                   ],
                 ),
               ),
-            if (vm.serviciosSeleccionados.isNotEmpty) const SizedBox(height: 10),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
