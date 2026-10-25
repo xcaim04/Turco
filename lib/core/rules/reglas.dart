@@ -12,7 +12,7 @@ class Reglas {
 
   /// Franjas de inicio 09:00 ... 18:30 (cada 30 min).
   static List<DateTime> franjasDelDia(DateTime f) {
-    final n = (cierre - apertura) * 60 ~/ pasoMin;
+    const n = (cierre - apertura) * 60 ~/ pasoMin;
     return [for (var i = 0; i < n; i++) DateTime(f.year, f.month, f.day, apertura, i * pasoMin)];
   }
 
