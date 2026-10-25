@@ -17,6 +17,18 @@ class EstilistasViewModel extends ChangeNotifier {
 
   int turnosHoy(Estilista e) => store.programadosHoy(e.id);
 
+  /// Servicios que realiza el estilista, agrupados por categoría.
+  Map<Categoria, List<Servicio>> serviciosPorCategoria(Estilista e) {
+    final grupos = <Categoria, List<Servicio>>{};
+    for (final c in categoriasDe(e)) {
+      grupos[c] = [
+        for (final id in e.servicioIds)
+          if (store.servicioPorId(id) case final s? when s.categoria == c) s,
+      ];
+    }
+    return grupos;
+  }
+
   List<Categoria> categoriasDe(Estilista e) {
     final result = <Categoria>[];
     for (final id in e.servicioIds) {

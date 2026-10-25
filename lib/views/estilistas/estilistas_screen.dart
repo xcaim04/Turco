@@ -46,23 +46,33 @@ class _EstilistasScreenState extends State<EstilistasScreen> {
         return Scaffold(
           body: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: Container(
-                  width: double.infinity,
-                  color: cs.primary,
-                  padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 14, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.contact_page_outlined, size: 28, color: cs.onPrimary),
-                      const SizedBox(height: 8),
-                      Text('Estilistas', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: cs.onPrimary)),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${estilistas.length} profesionales · ${_textoTurnos(vm.programadosHoy)}',
-                        style: TextStyle(fontSize: 13, color: cs.onPrimary.withValues(alpha: 0.85)),
-                      ),
-                    ],
+              // Cabecera plegable: al hacer scroll queda fija solo la barra con el título.
+              SliverAppBar(
+                pinned: true,
+                expandedHeight: 168,
+                backgroundColor: cs.primary,
+                foregroundColor: cs.onPrimary,
+                surfaceTintColor: cs.primary,
+                flexibleSpace: FlexibleSpaceBar(
+                  titlePadding: const EdgeInsetsDirectional.only(start: 20, bottom: 14),
+                  title: Text(
+                    'Estilistas',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: cs.onPrimary),
+                  ),
+                  background: Padding(
+                    padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 14, 20, 52),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(Icons.contact_page_outlined, size: 28, color: cs.onPrimary),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${estilistas.length} profesionales · ${_textoTurnos(vm.programadosHoy)}',
+                          style: TextStyle(fontSize: 13, color: cs.onPrimary.withValues(alpha: 0.85)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -76,7 +86,7 @@ class _EstilistasScreenState extends State<EstilistasScreen> {
                     return _TarjetaEstilista(
                       estilista: e,
                       turnosHoy: vm.turnosHoy(e),
-                      categorias: vm.categoriasDe(e),
+                      servicios: vm.serviciosPorCategoria(e),
                     );
                   },
                 ),
@@ -93,12 +103,12 @@ class _TarjetaEstilista extends StatelessWidget {
   const _TarjetaEstilista({
     required this.estilista,
     required this.turnosHoy,
-    required this.categorias,
+    required this.servicios,
   });
 
   final Estilista estilista;
   final int turnosHoy;
-  final List<Categoria> categorias;
+  final Map<Categoria, List<Servicio>> servicios;
 
   @override
   Widget build(BuildContext context) {
@@ -122,31 +132,30 @@ class _TarjetaEstilista extends StatelessWidget {
                   children: [
                     Text(estilista.nombre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final c in categorias.take(2))
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: cs.outlineVariant),
+                    // Servicios agrupados por categoría.
+                    for (final MapEntry(key: c, value: lista) in servicios.entries) ...[
+                      Text(
+                        c.label.toUpperCase(),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final s in lista)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: cs.outlineVariant),
+                              ),
+                              child: Text(s.nombre, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
                             ),
-                            child: Text(c.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
-                          ),
-                        if (categorias.length > 2)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: cs.secondaryContainer,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text('+${categorias.length - 2}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSecondaryContainer)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Text(
                       turnosHoy == 0 ? 'Sin turnos hoy' : '${Fmt.turnos(turnosHoy)} hoy',
                       style: TextStyle(
